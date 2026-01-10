@@ -2,7 +2,6 @@
 
 **Complete Research Implementation with Deterministic Synthetic Results**
 
-[![CI Tests](https://img.shields.io/badge/tests-passing-brightgreen)](CI/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue)](Dockerfile)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue)](requirements.txt)
 
@@ -10,27 +9,32 @@
 
 This repository contains a **fully implemented, production-ready multi-agent system** for automating Suspicious Activity Report (SAR) generation and AML compliance workflows. The system demonstrates:
 
-- **Modular agent architecture** with Data Ingest, Crime Typology Classifier, External Intelligence, Narrative Generation, Agent-as-Judge validation, and Orchestration
-- **Constrained LLM generation** with mandatory evidence citation and auditability
-- **Privacy-preserving design** with PII redaction and regulatory safeguards
-- **Comprehensive evaluation** against rule-based, unsupervised, and supervised baselines
-- **Full reproducibility** with deterministic synthetic data generation
+### Key Features
+
+| Feature                        | Description                                                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Modular agent architecture** | Data Ingest, Crime Typology Classifier, External Intelligence, Narrative Generation, Agent-as-Judge validation, and Orchestration (composable agent pipeline) |
+| **Constrained LLM generation** | Deterministic, template-backed LLM outputs with mandatory evidence citation and audit logs for auditability                                                   |
+| **Privacy-preserving design**  | PII redaction and regulatory safeguards integrated into the pipeline to prevent leakage                                                                       |
+| **Comprehensive evaluation**   | Benchmarked against rule-based, unsupervised (Isolation Forest), and supervised (XGBoost) baselines                                                           |
+| **Full reproducibility**       | Deterministic synthetic data generation with fixed seeds for end-to-end reproducibility                                                                       |
 
 ## 📊 Key Results (Deterministic Synthetic Pipeline - Seed 42)
 
-| Metric | Rule-Based | Isolation Forest | XGBoost | Full Agentic System |
-|--------|------------|------------------|---------|---------------------|
-| Precision | 0.342 | 0.456 | 0.723 | 0.847 |
-| Recall | 0.891 | 0.634 | 0.812 | 0.893 |
-| F1 Score | 0.495 | 0.531 | 0.765 | 0.869 |
-| SAR Gen Time | N/A | N/A | N/A | 4.2s (±1.1s) |
-| False Positive Rate | 0.156 | 0.089 | 0.042 | 0.023 |
+| Metric              | Rule-Based | Isolation Forest | XGBoost | Full Agentic System |
+| ------------------- | ---------- | ---------------- | ------- | ------------------- |
+| Precision           | 0.342      | 0.456            | 0.723   | 0.847               |
+| Recall              | 0.891      | 0.634            | 0.812   | 0.893               |
+| F1 Score            | 0.495      | 0.531            | 0.765   | 0.869               |
+| SAR Gen Time        | N/A        | N/A              | N/A     | 4.2s (±1.1s)        |
+| False Positive Rate | 0.156      | 0.089            | 0.042   | 0.023               |
 
 **Note:** All results are from deterministic synthetic transaction data (100K transactions, 2.3% fraud rate). See [Reproducibility](#reproducibility) for details.
 
 ## 🚀 Quick Start (30 minutes)
 
 ### Prerequisites
+
 - Docker & Docker Compose
 - 4+ CPU cores, 8GB RAM
 - (Optional) OpenAI API key for LLM narrative generation
@@ -50,7 +54,7 @@ export SANCTIONS_API_KEY="demo"  # Falls back to mock data
 docker-compose up
 
 # Run quick experiment (30 min)
-docker-compose run aml-system ./run_quick.sh
+docker-compose run aml-system python -m scripts.generate_quick_results
 
 # View results
 ls results/quick_run/
@@ -68,10 +72,10 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Run quick experiment
-./run_quick.sh
+python -m scripts.generate_quick_results
 
 # Run full experiments (4-8 hours)
-./run_full.sh
+python -m scripts.generate_deterministic_results
 ```
 
 ## 📁 Repository Structure
@@ -174,40 +178,37 @@ All results are **100% reproducible** with deterministic random seeds:
 
 ### Quick Reproducibility Check
 
-```bash
-# Run integration test
-pytest tests/test_integration.py -v
-
-# Should complete in <5 minutes with identical outputs
-# Check: results/test_integration/metrics.json
-```
+| Command                               | Expected duration | Expected outcome                                                           |
+| ------------------------------------- | ----------------: | -------------------------------------------------------------------------- |
+| `pytest tests/test_integration.py -v` |       < 5 minutes | Creates `results/test_integration/metrics.json` with deterministic outputs |
 
 ### Full Reproducibility
 
 ```bash
 # Run complete experiments
-./run_full.sh
+python -m scripts.generate_deterministic_results
 
 # Verify checksums
 python scripts/verify_reproducibility.py
 ```
 
-See [reproducibility-checklist.md](reproducibility-checklist.md) for detailed instructions.
-
 ## 📈 Datasets & Data Sources
 
 ### Synthetic Data (Default)
+
 - **Generator**: `code/data/synthetic_generator.py`
 - **Specification**: 100K transactions, 2.3% fraud rate, 7 crime typologies
 - **Validation**: Compared against IBM AML data characteristics
 - **License**: Generated, no restrictions
 
 ### Open Datasets (Optional)
+
 - **Credit Card Fraud (Kaggle)**: Anonymized credit card transactions
 - **IEEE-CIS Fraud Detection**: E-commerce fraud dataset
 - **Synthetic Financial Datasets**: From research benchmarks
 
 ### Commercial/Restricted Data (Requires API Keys)
+
 - **Sanctions Lists**: OFAC, UN, EU (API key required, mock fallback)
 - **PEP Lists**: World-Check API (API key required, mock fallback)
 
@@ -217,83 +218,86 @@ All data sources documented in [data/README.md](data/README.md) with license ver
 
 ### Agent Hierarchy
 
-```
-Orchestrator
-├── Ingest Agent → Feature Engineer
-├── Crime Classifier (XGBoost/LLM)
-├── Intelligence Agent (Sanctions/PEP)
-├── Evidence Aggregator
-├── Privacy Guard (PII Redaction)
-├── Narrative Agent (Constrained LLM)
-└── Agent-as-Judge (Validation)
-```
+| Agent                   | Responsibility                                                             |
+| ----------------------- | -------------------------------------------------------------------------- |
+| **Orchestrator**        | Coordinates the pipeline and manages workflow across agents                |
+| **Ingest Agent**        | Streams and normalizes transaction data; hands off to feature engineering  |
+| **Feature Engineer**    | Extracts and transforms features used by classifiers and models            |
+| **Crime Classifier**    | Typology classification (XGBoost/LLM hybrid)                               |
+| **Intelligence Agent**  | Matches sanctions/PEP data and enriches records with external intelligence |
+| **Evidence Aggregator** | Collects and links evidence across agents for citation and auditing        |
+| **Privacy Guard**       | Detects and redacts PII before sensitive operations                        |
+| **Narrative Agent**     | Generates constrained, cite-backed narratives for SARs                     |
+| **Agent-as-Judge**      | Validates outputs and enforces quality thresholds                          |
 
 ### Key Design Principles
 
-1. **Evidence Citation**: Every narrative claim must cite transaction ID + field
-2. **Audit Trail**: All agent I/O logged as JSONL with timestamps
-3. **Privacy-First**: PII redacted before any LLM call
-4. **Human-in-Loop**: High-severity SARs require investigator approval
-5. **Graceful Degradation**: System functions without LLM API (rule-based fallback)
+| Principle                | Explanation                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| **Evidence Citation**    | Every narrative claim cites transaction IDs and source fields for auditability |
+| **Audit Trail**          | All agent I/O logged as JSONL with timestamps to enable replay and review      |
+| **Privacy-First**        | PII redaction is applied before any LLM call to prevent leakage                |
+| **Human-in-Loop**        | High-severity SARs require investigator approval and throttling                |
+| **Graceful Degradation** | System operates with rule-based fallbacks when an LLM API is unavailable       |
 
 ## 🧪 Evaluation Framework
 
 ### Baselines Implemented
-- **Rule-Based**: Threshold detectors (amount, velocity, geographic)
-- **Isolation Forest**: Unsupervised anomaly detection
-- **XGBoost**: Supervised classifier with handcrafted features
-- **LLM-Only**: GPT-4 zero-shot classification (no agents)
-- **Full Agentic**: Complete multi-agent pipeline
+
+| Baseline             | Type                | Notes                                                                    |
+| -------------------- | ------------------- | ------------------------------------------------------------------------ |
+| **Rule-Based**       | Heuristic           | Threshold detectors (amount, velocity, geographic)                       |
+| **Isolation Forest** | Unsupervised        | Anomaly detection on feature vectors                                     |
+| **XGBoost**          | Supervised          | Handcrafted features, tuned by cross-validation                          |
+| **LLM-Only**         | LLM                 | GPT-4 zero-shot classification baseline (no agents)                      |
+| **Full Agentic**     | Multimodal pipeline | Full agentic system combining models, intelligence, and constrained LLMs |
 
 ### Metrics
-- **Detection**: Precision, Recall, F1, ROC-AUC, PR-AUC
-- **Efficiency**: SAR generation time, throughput (SARs/hour)
-- **Quality**: Compliance score (synthetic human eval), citation coverage
-- **Tradeoffs**: False positive rate vs detection latency
+
+| Category       | Metrics                                                    |
+| -------------- | ---------------------------------------------------------- |
+| **Detection**  | Precision, Recall, F1, ROC-AUC, PR-AUC                     |
+| **Efficiency** | SAR generation time, throughput (SARs/hour)                |
+| **Quality**    | Compliance score (synthetic human eval), citation coverage |
+| **Tradeoffs**  | False positive rate vs detection latency                   |
 
 ### Statistical Testing
-- Paired bootstrap confidence intervals (10K samples)
-- Permutation tests for significance (α=0.05)
-- Rolling time-series cross-validation (6 folds)
+
+| Test                                           | Purpose                                 |
+| ---------------------------------------------- | --------------------------------------- |
+| Paired bootstrap (10k resamples)               | Confidence intervals for paired metrics |
+| Permutation tests (α=0.05)                     | Significance testing between models     |
+| Rolling time-series cross-validation (6 folds) | Temporal robustness and stability       |
 
 ## 🛡️ Privacy & Security
 
 ### Implemented Safeguards
 
-1. **PII Redaction** (`code/agents/privacy_guard.py`)
-   - Deterministic redaction of names, SSNs, account numbers
-   - Pattern-based + NER-based detection
-   - All text sanitized before LLM calls
-
-2. **Investigator Gating** (`code/agents/orchestrator.py`)
-   - High-severity SARs (score >0.9) require human approval
-   - Max 10 SARs/entity/month throttle
-
-3. **Audit Logging** (`results/logs/`)
-   - Every agent decision logged with timestamp
-   - Full replay capability for investigations
-
-4. **Kill Switch** (`code/agents/orchestrator.py`)
-   - Emergency stop via environment variable
-   - Graceful shutdown with state preservation
+| Safeguard               | Description                                                                  | Location                       |
+| ----------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
+| **PII Redaction**       | Deterministic redaction (pattern-based + NER) applied before LLM calls       | `code/agents/privacy_guard.py` |
+| **Investigator Gating** | Human approval for high-severity SARs; throttling (max 10 SARs/entity/month) | `code/agents/orchestrator.py`  |
+| **Audit Logging**       | JSONL audit trail for all agent decisions with replay capability             | `results/logs/`                |
+| **Kill Switch**         | Emergency stop via env var with graceful shutdown and state preservation     | `code/agents/orchestrator.py`  |
 
 ### Regulatory Compliance
-- **FATF Recommendations**: Documented alignment in `ethics/regulatory_analysis.md`
-- **GDPR**: Data minimization, right to explanation
-- **PCI DSS**: No storage of full card numbers
-- **Bank Secrecy Act**: SAR filing thresholds and timelines
+
+| Regulation               | Conformance                                             |
+| ------------------------ | ------------------------------------------------------- |
+| **FATF Recommendations** | Alignment documented in `ethics/regulatory_analysis.md` |
+| **GDPR**                 | Data minimization and rights to explanation implemented |
+| **PCI DSS**              | No storage of full card numbers                         |
+| **Bank Secrecy Act**     | SAR filing thresholds & timelines observed              |
 
 ## 📊 Key Findings (Synthetic Pipeline)
 
-1. **Accuracy**: Agentic system achieves 0.869 F1 (vs 0.765 XGBoost baseline), 13.6% improvement (p<0.001)
-
-2. **Efficiency**: Mean SAR generation time 4.2s (σ=1.1s), enabling real-time processing
-
-3. **Explainability**: 98.7% of narrative claims successfully linked to evidence in audit logs
-
-4. **False Positives**: 77% reduction vs rule-based system (0.023 vs 0.156 FPR)
-
-5. **Ablation**: Removing Agent-as-Judge increases hallucinations by 23%; removing External Intelligence reduces recall by 8%
+| Finding             | Summary                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Accuracy**        | Agentic system: **0.869 F1** vs XGBoost: 0.765 F1 — **+13.6%** (p<0.001)                             |
+| **Efficiency**      | Mean SAR generation time **4.2s (σ=1.1s)** — supports near-real-time processing                      |
+| **Explainability**  | **98.7%** of narrative claims linked to evidence in audit logs — high citation coverage              |
+| **False Positives** | **77% reduction** vs rule-based (FPR 0.023 vs 0.156)                                                 |
+| **Ablation**        | Removing Agent-as-Judge → hallucinations ↑ **23%**; removing External Intelligence → recall ↓ **8%** |
 
 ## 🚧 Limitations
 
@@ -302,4 +306,3 @@ Orchestrator
 3. **Regulatory Acceptance**: Requires validation with compliance officers and regulators
 4. **Adversarial Robustness**: Not tested against adaptive adversaries
 5. **Scalability**: Current implementation is single-node; distributed version needed for production scale
-

@@ -23,17 +23,19 @@ from code.agents.narrative_agent import NarrativeAgent
 class ExperimentRunner:
     """Runs complete experimental suite with deterministic results."""
 
-    def __init__(self, seed=42, output_dir="results"):
+    def __init__(self, seed=42, output_dir="results", model_params: dict = None):
         """
         Initialize experiment runner.
 
         Args:
             seed: Random seed for reproducibility
             output_dir: Output directory for results
+            model_params: Optional dict of parameters passed to model constructors
         """
         self.seed = seed
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.model_params = model_params or {}
 
         # Set all random seeds
         np.random.seed(seed)
@@ -203,7 +205,7 @@ class ExperimentRunner:
         from sklearn.ensemble import IsolationForest
 
         # Engineer features
-        classifier = XGBoostClassifier(seed=self.seed)
+        classifier = XGBoostClassifier(seed=self.seed, **self.model_params)
         train_features = classifier.engineer_features(train_df)
         test_features = classifier.engineer_features(test_df)
 
@@ -230,7 +232,9 @@ class ExperimentRunner:
 
     def _run_xgboost(self, train_df, test_df):
         """XGBoost classifier."""
-        classifier = XGBoostClassifier(task="binary", seed=self.seed)
+        classifier = XGBoostClassifier(
+            task="binary", seed=self.seed, **self.model_params
+        )
 
         # Engineer features
         train_features = classifier.engineer_features(train_df)
@@ -256,7 +260,9 @@ class ExperimentRunner:
     def _run_agentic_system(self, train_df, test_df):
         """Run full agentic system."""
         # Use XGBoost as detector + add agent layers
-        classifier = XGBoostClassifier(task="binary", seed=self.seed)
+        classifier = XGBoostClassifier(
+            task="binary", seed=self.seed, **self.model_params
+        )
 
         # Train
         train_features = classifier.engineer_features(train_df)

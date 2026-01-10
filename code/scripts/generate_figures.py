@@ -1,14 +1,28 @@
 """
 Generate Publication-Ready Figures
 Creates all figures from experimental results.
+
+Enhancements:
+- Uses a headless matplotlib backend ('Agg') so figure generation works in CI
+  and containerized environments.
+- Includes robust result loading and validation with helpful error messages.
+- Allows granular figure selection via `--which`.
 """
+
+from __future__ import annotations
 
 import json
 import numpy as np
+import matplotlib
+
+# Use Agg backend for headless environments (must be set before pyplot import)
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 import argparse
+import logging
+from typing import Dict
 
 # Set style
 sns.set_style("whitegrid")
@@ -16,36 +30,60 @@ plt.rcParams["figure.dpi"] = 300
 plt.rcParams["savefig.dpi"] = 300
 plt.rcParams["font.size"] = 10
 
+logger = logging.getLogger(__name__)
 
-def generate_roc_pr_curves(results_dir, output_dir):
+
+def _load_results(results_path: Path) -> Dict:
+    """Load and validate `full_experiments.json`.
+
+    Raises a RuntimeError with a helpful message on failure.
+    """
+    if not results_path.exists():
+        raise RuntimeError(f"Results file not found: {results_path}")
+
+    try:
+        with open(results_path, "r") as f:
+            results = json.load(f)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Failed to parse JSON results at {results_path}: {e}")
+
+    # Minimal validation
+    if "baseline_results" not in results or "agentic_results" not in results:
+        raise RuntimeError(f"Missing expected keys in results file: {results_path}")
+
+    return results
+
+
+def generate_roc_pr_curves(results_dir: Path, output_dir: Path):
     """Generate ROC and PR curves comparing all models."""
-
-    # Load results
-    with open(results_dir / "full_experiments.json", "r") as f:
-        results = json.load(f)
+    results_path = results_dir / "full_experiments.json"
+    results = _load_results(results_path)
 
     # Create figure with 2 subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
-    # Extract metrics for each model
+    # Extract metrics for each model (use .get with defaults)
     models = {
-        "Rule-Based": results["baseline_results"]["rule_based"],
-        "Isolation Forest": results["baseline_results"]["isolation_forest"],
-        "XGBoost": results["baseline_results"]["xgboost"],
-        "Agentic System": results["agentic_results"],
+        "Rule-Based": results["baseline_results"].get("rule_based", {}),
+        "Isolation Forest": results["baseline_results"].get("isolation_forest", {}),
+        "XGBoost": results["baseline_results"].get("xgboost", {}),
+        "Agentic System": results.get("agentic_results", {}),
     }
 
     colors = ["#ff7f0e", "#2ca02c", "#1f77b4", "#d62728"]
 
-    # Plot ROC curves
+    # Plot ROC curves (synthetic interpolation using AUC)
     for (name, metrics), color in zip(models.items(), colors):
-        # For demonstration, create synthetic curves based on AUC
-        fpr = np.linspace(0, 1, 100)
-        tpr = fpr ** (1 / metrics["roc_auc"])  # Approximate curve
+        roc_auc = float(metrics.get("roc_auc", 0.0))
+        pr_auc = float(metrics.get("pr_auc", 0.0))
+
+        fpr = np.linspace(0, 1, 200)
+        # avoid division by zero
+        tpr = fpr ** (1 / (roc_auc + 1e-6)) if roc_auc > 0 else fpr
         ax1.plot(
             fpr,
             tpr,
-            label=f"{name} (AUC={metrics['roc_auc']:.3f})",
+            label=f"{name} (AUC={roc_auc:.3f})",
             color=color,
             linewidth=2,
         )
@@ -59,13 +97,13 @@ def generate_roc_pr_curves(results_dir, output_dir):
 
     # Plot PR curves
     for (name, metrics), color in zip(models.items(), colors):
-        # For demonstration, create synthetic curves based on PR-AUC
-        recall = np.linspace(0, 1, 100)
-        precision = (1 - recall) * 0.3 + metrics["pr_auc"] * recall  # Approximate
+        pr_auc = float(metrics.get("pr_auc", 0.0))
+        recall = np.linspace(0, 1, 200)
+        precision = (1 - recall) * 0.3 + pr_auc * recall
         ax2.plot(
             recall,
             precision,
-            label=f"{name} (AUC={metrics['pr_auc']:.3f})",
+            label=f"{name} (AUC={pr_auc:.3f})",
             color=color,
             linewidth=2,
         )
@@ -81,28 +119,26 @@ def generate_roc_pr_curves(results_dir, output_dir):
     plt.savefig(output_path, bbox_inches="tight", dpi=300)
     plt.close()
 
-    print(f"Generated: {output_path}")
+    logger.info("Generated: %s", output_path)
 
 
-def generate_sar_latency_throughput(results_dir, output_dir):
+def generate_sar_latency_throughput(results_dir: Path, output_dir: Path):
     """Generate SAR latency distribution and throughput chart."""
+    results_path = results_dir / "full_experiments.json"
+    results = _load_results(results_path)
 
-    # Load results
-    with open(results_dir / "full_experiments.json", "r") as f:
-        results = json.load(f)
-
-    agentic = results["agentic_results"]
+    agentic = results.get("agentic_results", {})
 
     # Create figure with 2 subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
 
     # Simulate SAR generation times (from results)
-    mean_time = agentic.get("sar_generation_time_mean", 4.2)
-    std_time = agentic.get("sar_generation_time_std", 1.1)
+    mean_time = float(agentic.get("sar_generation_time_mean", 4.2))
+    std_time = float(agentic.get("sar_generation_time_std", 1.1))
 
     # Generate synthetic distribution
-    np.random.seed(42)
-    sar_times = np.random.normal(mean_time, std_time, 1000)
+    rng = np.random.default_rng(42)
+    sar_times = rng.normal(mean_time, std_time, 1000)
     sar_times = np.clip(sar_times, 0.5, 10)  # Clip to reasonable range
 
     # Plot 1: Latency distribution
@@ -120,9 +156,10 @@ def generate_sar_latency_throughput(results_dir, output_dir):
     ax1.legend()
     ax1.grid(alpha=0.3)
 
-    # Plot 2: Throughput comparison
+    # Plot 2: Throughput comparison (approximate)
     models = ["Rule-Based", "Isolation\nForest", "XGBoost", "Agentic\nSystem"]
-    throughput = [0, 0, 0, 3600 / mean_time]  # SARs per hour (only agentic generates)
+    # Estimate throughput: Agentic system throughput derived from mean_time
+    throughput = [0, 0, 0, max(1.0, 3600 / max(mean_time, 1e-6))]
     colors_bar = ["#ff7f0e", "#2ca02c", "#1f77b4", "#d62728"]
 
     bars = ax2.bar(models, throughput, color=colors_bar, alpha=0.7, edgecolor="black")
@@ -147,37 +184,36 @@ def generate_sar_latency_throughput(results_dir, output_dir):
     plt.savefig(output_path, bbox_inches="tight", dpi=300)
     plt.close()
 
-    print(f"Generated: {output_path}")
+    logger.info("Generated: %s", output_path)
 
 
-def generate_metrics_comparison(results_dir, output_dir):
+def generate_metrics_comparison(results_dir: Path, output_dir: Path):
     """Generate metrics comparison bar chart."""
-
-    with open(results_dir / "full_experiments.json", "r") as f:
-        results = json.load(f)
+    results_path = results_dir / "full_experiments.json"
+    results = _load_results(results_path)
 
     # Extract metrics
     models = ["Rule-Based", "Isolation\nForest", "XGBoost", "Agentic\nSystem"]
 
     precision = [
-        results["baseline_results"]["rule_based"]["precision"],
-        results["baseline_results"]["isolation_forest"]["precision"],
-        results["baseline_results"]["xgboost"]["precision"],
-        results["agentic_results"]["precision"],
+        results["baseline_results"].get("rule_based", {}).get("precision", 0.0),
+        results["baseline_results"].get("isolation_forest", {}).get("precision", 0.0),
+        results["baseline_results"].get("xgboost", {}).get("precision", 0.0),
+        results.get("agentic_results", {}).get("precision", 0.0),
     ]
 
     recall = [
-        results["baseline_results"]["rule_based"]["recall"],
-        results["baseline_results"]["isolation_forest"]["recall"],
-        results["baseline_results"]["xgboost"]["recall"],
-        results["agentic_results"]["recall"],
+        results["baseline_results"].get("rule_based", {}).get("recall", 0.0),
+        results["baseline_results"].get("isolation_forest", {}).get("recall", 0.0),
+        results["baseline_results"].get("xgboost", {}).get("recall", 0.0),
+        results.get("agentic_results", {}).get("recall", 0.0),
     ]
 
     f1 = [
-        results["baseline_results"]["rule_based"]["f1"],
-        results["baseline_results"]["isolation_forest"]["f1"],
-        results["baseline_results"]["xgboost"]["f1"],
-        results["agentic_results"]["f1"],
+        results["baseline_results"].get("rule_based", {}).get("f1", 0.0),
+        results["baseline_results"].get("isolation_forest", {}).get("f1", 0.0),
+        results["baseline_results"].get("xgboost", {}).get("f1", 0.0),
+        results.get("agentic_results", {}).get("f1", 0.0),
     ]
 
     # Create grouped bar chart
@@ -219,10 +255,10 @@ def generate_metrics_comparison(results_dir, output_dir):
     plt.savefig(output_path, bbox_inches="tight", dpi=300)
     plt.close()
 
-    print(f"Generated: {output_path}")
+    logger.info("Generated: %s", output_path)
 
 
-def generate_architecture_diagram(output_dir):
+def generate_architecture_diagram(output_dir: Path):
     """Generate system architecture diagram using Graphviz."""
     try:
         import graphviz
@@ -259,13 +295,13 @@ def generate_architecture_diagram(output_dir):
         output_path = output_dir / "system_architecture"
         dot.render(output_path, format="svg", cleanup=True)
 
-        print(f"Generated: {output_path}.svg")
+        logger.info("Generated: %s.svg", output_path)
 
     except ImportError:
-        print("Warning: graphviz not installed, skipping architecture diagram")
+        logger.warning("graphviz not installed, skipping architecture diagram")
 
 
-def generate_explainability_annotation(output_dir):
+def generate_explainability_annotation(output_dir: Path):
     """Generate annotated SAR example showing evidence citations."""
 
     fig, ax = plt.subplots(figsize=(12, 8))
@@ -339,7 +375,7 @@ VALIDATION:
     plt.savefig(output_path, bbox_inches="tight", dpi=300)
     plt.close()
 
-    print(f"Generated: {output_path}")
+    logger.info("Generated: %s", output_path)
 
 
 def main():
@@ -347,6 +383,14 @@ def main():
     parser.add_argument("--results-dir", type=str, default="results/full_experiments")
     parser.add_argument("--output-dir", type=str, default="figures")
     parser.add_argument("--high-dpi", action="store_true", help="Use high DPI (300)")
+    parser.add_argument(
+        "--which",
+        type=str,
+        nargs="+",
+        choices=["rocpr", "latency", "metrics", "architecture", "explain", "all"],
+        default=["all"],
+        help="Select which figures to generate (defaults to all)",
+    )
 
     args = parser.parse_args()
 
@@ -358,17 +402,26 @@ def main():
         plt.rcParams["figure.dpi"] = 300
         plt.rcParams["savefig.dpi"] = 300
 
-    print("Generating publication figures...")
-    print("=" * 50)
+    logger.info("Generating publication figures...")
+    logger.info("%s", "=" * 50)
 
-    generate_roc_pr_curves(results_dir, output_dir)
-    generate_sar_latency_throughput(results_dir, output_dir)
-    generate_metrics_comparison(results_dir, output_dir)
-    generate_architecture_diagram(output_dir)
-    generate_explainability_annotation(output_dir)
+    choices = set(args.which)
+    if "all" in choices:
+        choices = {"rocpr", "latency", "metrics", "architecture", "explain"}
 
-    print("=" * 50)
-    print(f"All figures generated in: {output_dir}")
+    if "rocpr" in choices:
+        generate_roc_pr_curves(results_dir, output_dir)
+    if "latency" in choices:
+        generate_sar_latency_throughput(results_dir, output_dir)
+    if "metrics" in choices:
+        generate_metrics_comparison(results_dir, output_dir)
+    if "architecture" in choices:
+        generate_architecture_diagram(output_dir)
+    if "explain" in choices:
+        generate_explainability_annotation(output_dir)
+
+    logger.info("%s", "=" * 50)
+    logger.info("All requested figures generated in: %s", output_dir)
 
 
 if __name__ == "__main__":

@@ -48,14 +48,17 @@ def test_privacy_guard(synthetic_data):
     }
 
     privacy_guard = PrivacyGuard()
-    result = privacy_guard.execute(txn)
+    result = privacy_guard.process(txn)
 
-    assert result["status"] == "success"
-    redacted = result["result"]["redacted_data"]
+    # Check response structure
+    assert "redacted_data" in result
+    assert "redaction_applied" in result
+
+    redacted = result["redacted_data"]
 
     # Check PII was redacted
     assert "[REDACTED_EMAIL" in str(redacted) or "john@example.com" not in str(redacted)
-    assert result["result"]["redaction_applied"]
+    assert result["redaction_applied"]
 
 
 def test_xgboost_classifier(synthetic_data):
@@ -64,7 +67,7 @@ def test_xgboost_classifier(synthetic_data):
     train_df = synthetic_data.iloc[:700]
     test_df = synthetic_data.iloc[700:]
 
-    classifier = XGBoostClassifier(task="binary", seed=42)
+    classifier = XGBoostClassifier(task="binary", seed=42, n_estimators=10)
 
     # Engineer features
     train_features = classifier.engineer_features(train_df)
@@ -118,7 +121,7 @@ def test_narrative_agent():
         },
     ]
 
-    result = narrative_agent.execute(
+    result = narrative_agent.process(
         {
             "subject_id": "USER_001234",
             "transactions": transactions,
@@ -128,10 +131,12 @@ def test_narrative_agent():
         }
     )
 
-    assert result["status"] == "success"
-    assert "narrative" in result["result"]
-    assert "citations" in result["result"]
-    assert len(result["result"]["narrative"]) > 100  # Non-trivial narrative
+    # Template-based generation should return expected keys
+    assert "narrative" in result
+    assert "citations" in result
+    assert isinstance(result["citations"], list)
+    assert len(result["narrative"]) > 100  # Non-trivial narrative
+    assert result.get("generation_method") == "template"
 
 
 def test_end_to_end_pipeline(synthetic_data, tmp_path):
@@ -143,14 +148,15 @@ def test_end_to_end_pipeline(synthetic_data, tmp_path):
     # Step 2: Privacy Guard
     privacy_guard = PrivacyGuard()
     sample_txns = synthetic_data.head(10).to_dict("records")
-    privacy_result = privacy_guard.execute(sample_txns)
-    assert privacy_result["status"] == "success"
+    privacy_result = privacy_guard.process(sample_txns)
+    assert "redacted_data" in privacy_result
+    assert isinstance(privacy_result["redacted_data"], list)
 
     # Step 3: Classification
     train_df = synthetic_data.iloc[:700]
     test_df = synthetic_data.iloc[700:]
 
-    classifier = XGBoostClassifier(task="binary", seed=42)
+    classifier = XGBoostClassifier(task="binary", seed=42, n_estimators=10)
     train_features = classifier.engineer_features(train_df)
     X_train, y_train = classifier.prepare_data(train_features)
     classifier.train(X_train, y_train)
@@ -168,7 +174,7 @@ def test_end_to_end_pipeline(synthetic_data, tmp_path):
         txn = test_df.iloc[idx].to_dict()
 
         narrative_agent = NarrativeAgent()
-        sar = narrative_agent.execute(
+        sar = narrative_agent.process(
             {
                 "subject_id": txn["sender_id"],
                 "transactions": [txn],
@@ -178,8 +184,9 @@ def test_end_to_end_pipeline(synthetic_data, tmp_path):
             }
         )
 
-        assert sar["status"] == "success"
-        assert "narrative" in sar["result"]
+        assert "narrative" in sar
+        assert "citations" in sar
+        assert isinstance(sar["citations"], list)
 
         # Save SAR
         sar_file = tmp_path / "test_sar.json"

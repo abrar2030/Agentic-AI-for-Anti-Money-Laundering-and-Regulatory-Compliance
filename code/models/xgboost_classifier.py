@@ -23,16 +23,22 @@ class XGBoostClassifier:
     - Feature importance analysis
     """
 
-    def __init__(self, task="binary", seed=42):
+    def __init__(
+        self, task="binary", seed=42, n_estimators: int = 100, max_depth: int = 6
+    ):
         """
         Initialize classifier.
 
         Args:
             task: 'binary' for fraud/benign, 'multiclass' for typology
             seed: Random seed
+            n_estimators: Number of boosting rounds (trees)
+            max_depth: Maximum tree depth
         """
         self.task = task
         self.seed = seed
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder() if task == "multiclass" else None
         self.model = None
@@ -224,9 +230,9 @@ class XGBoostClassifier:
             params = {
                 "objective": "binary:logistic",
                 "eval_metric": "auc",
-                "max_depth": 6,
+                "max_depth": self.max_depth,
                 "learning_rate": 0.1,
-                "n_estimators": 100,
+                "n_estimators": self.n_estimators,
                 "subsample": 0.8,
                 "colsample_bytree": 0.8,
                 "seed": self.seed,
@@ -237,9 +243,9 @@ class XGBoostClassifier:
                 "objective": "multi:softprob",
                 "num_class": len(np.unique(y_train)),
                 "eval_metric": "mlogloss",
-                "max_depth": 6,
+                "max_depth": self.max_depth,
                 "learning_rate": 0.1,
-                "n_estimators": 100,
+                "n_estimators": self.n_estimators,
                 "subsample": 0.8,
                 "colsample_bytree": 0.8,
                 "seed": self.seed,
