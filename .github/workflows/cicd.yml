@@ -43,7 +43,7 @@ jobs:
         run: pip install --upgrade pip && pip install autoflake black
 
       # -------------------------------
-      # Run Python formatting checks (backend only)
+      # Run Python formatting checks
       # -------------------------------
       - name: Run Python formatting checks (backend)
         shell: bash
@@ -81,13 +81,12 @@ jobs:
           black "${{ env.BACKEND_DIR }}" --check
 
       # -------------------------------
-      # Node Setup (Fixed)
+      # Node Setup
       # -------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-          # Removed cache: "npm" to prevent "lock file not found" error
 
       # -------------------------------
       # Prettier checks (Markdown & YAML)
