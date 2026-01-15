@@ -81,30 +81,22 @@ jobs:
           black "${{ env.BACKEND_DIR }}" --check
 
       # -------------------------------
-      # Node + npm caching
+      # Node Setup (Fixed)
       # -------------------------------
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "18"
-          cache: "npm"
-
-      - name: Install Node dependencies (root)
-        run: |
-          if [ -f package.json ]; then
-            npm ci
-          else
-            echo "No package.json found, skipping npm ci."
-          fi
+          # Removed cache: "npm" to prevent "lock file not found" error
 
       # -------------------------------
       # Prettier checks (Markdown & YAML)
       # -------------------------------
-
       - name: Run Prettier Checks (all .md files in repo)
         run: |
           echo "=== Running Prettier (all .md files) ==="
-          npx --no-install prettier --check "**/*.md" --ignore-path .prettierignore || {
+          # Using npx prettier@latest to ensure it runs without local install
+          npx prettier@latest --check "**/*.md" --ignore-path .prettierignore || {
             echo "Prettier formatting issues detected in markdown files."
             exit 1
           }
@@ -112,7 +104,7 @@ jobs:
       - name: Run Prettier Checks (all YAML/YML files in repo)
         run: |
           echo "=== Running Prettier (all .yml and .yaml files) ==="
-          npx --no-install prettier --check "**/*.{yml,yaml}" --ignore-path .prettierignore || {
+          npx prettier@latest --check "**/*.{yml,yaml}" --ignore-path .prettierignore || {
             echo "Prettier formatting issues detected in YAML/YML files."
             exit 1
           }
